@@ -1,9 +1,9 @@
 import numpy as np
-from math import pi, sqrt
+from math import pi, sqrt, cos, sin
 from scipy.spatial import ConvexHull
 from porespy.metrics import regionprops_3D
 from skimage.morphology import ball
-from scipy.ndimage import binary_opening
+from scipy.ndimage import binary_opening, convolve
 from skimage.transform import resize
 
 from .descriptor import DescriptorBase, DescriptorType
@@ -218,11 +218,11 @@ class HistogramDescriptors3D(DescriptorBase):
         result["median"] = median_bin_left + ((total_count / 2
                                                - total_counts_before_median)
                                               / median_bin_count) * bin_width
-        
+
         weighted_log = np.log(bin_centers) * histogram
         mean_weighted_log = np.sum(weighted_log) / total_count
         result["gmean"] = np.exp(mean_weighted_log)
-        
+
         result["skewness"] = moment3 / (result["std"] ** 3)
         result["kurtosis"] = (moment4 / (result["var"] ** 2)) - 3
 
@@ -350,7 +350,7 @@ class LocalBinaryPattern3D(DescriptorBase):
 
     def Eval(self, image: np.array, mask: np.array):
         src = np.copy(image)
-        src[mask == 0] = 0        
+        src[mask == 0] = 0
         lbp = self.ComputeLBP3D(src, self.radius)
 
         hist, bin_edges = Histogram3D(64).Eval(lbp, mask)
@@ -613,7 +613,8 @@ class GlcmFeatures3D(DescriptorBase):
         - glcm_mean
     """
 
-    def __init__(self, delta: tuple[int] = (1, 1, 1), distance: int = 1):
+    def __init__(self, delta: tuple[int, int, int] = (1, 1, 1),
+                 distance: int = 1):
         self.delta = delta
         self.distance = distance
 
@@ -798,7 +799,7 @@ class GaborFilterBank(DescriptorBase):
 
         return g / g.sum()
 
-    def Eval(self) -> np.array:
+    def Eval(self):
         filters = []
 
         for theta_x in np.arange(0, np.pi, np.pi / 4):

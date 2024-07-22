@@ -4,7 +4,7 @@ from .descriptors2d import MaskDecriptors, HistogramDescriptors, \
     PowerSpectrum, Autocorrelation, LocalBinaryPattern, GaborEnergy
 from .descriptors3d import MaskDescriptors3D, HistogramDescriptors3D, \
     Granulometry3D, Autocorrelation3D, LocalBinaryPattern3D, PowerSpectrum3D, \
-    GlcmFeatures3D, RawMoments3D, HuMoments3D, CentralMoments3D
+    GlcmFeatures3D, RawMoments3D, HuMoments3D, CentralMoments3D, GaborFilters
 
 
 def GetAll(d: int = 2) -> list:
@@ -39,6 +39,7 @@ def GetAll(d: int = 2) -> list:
         desc.append(RawMoments3D())
         desc.append(HuMoments3D())
         desc.append(CentralMoments3D())
+        desc.append(GaborFilters())
     return desc
 
 

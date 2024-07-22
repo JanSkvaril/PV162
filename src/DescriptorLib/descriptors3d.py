@@ -430,7 +430,7 @@ class RawMoments3D(DescriptorBase):
         return DescriptorType.DICT_SCALAR
 
 
-class CentralMoments(DescriptorBase):
+class CentralMoments3D(DescriptorBase):
     """
         Calculates the centroids and central moments from the 2nd up to
         the given order or defaults to the 4th order of the image within
@@ -610,6 +610,7 @@ class GlcmFeatures3D(DescriptorBase):
         - correlation
         - shade
         - prominence
+        - glcm_mean
     """
 
     def __init__(self, delta: tuple[int] = (1, 1, 1), distance: int = 1):
@@ -617,10 +618,10 @@ class GlcmFeatures3D(DescriptorBase):
         self.distance = distance
 
     def Eval(self, image: np.array, mask: np.array):
-        glcm = self.Glcm3D(image, mask)
-        return self.GlcmFeatures3D(glcm)
+        glcm = self.Glcm(image, mask)
+        return self.GlcmFeatures(glcm)
 
-    def Glcm3D(self, image: np.array, mask: np.array) -> np.array:
+    def Glcm(self, image: np.array, mask: np.array) -> np.array:
         """
             Creates gray level co-ocurrence matrix from values in mask.
             - image: 2D numpy array, with values ranging from 0 to 255
@@ -663,7 +664,7 @@ class GlcmFeatures3D(DescriptorBase):
         else:
             return 0
 
-    def GlcmFeatures3D(self, matrix: np.array, mean: bool = True) -> dict:
+    def GlcmFeatures(self, matrix: np.array, mean: bool = True) -> dict:
         """
             Computes the descriptors of the normalized co-ocurrence matrix.
             - matrix: glcm matrix
@@ -676,6 +677,7 @@ class GlcmFeatures3D(DescriptorBase):
             - correlation
             - shade
             - prominence
+            - glcm_mean
         """
         result = dict()
 
@@ -693,6 +695,8 @@ class GlcmFeatures3D(DescriptorBase):
         glcm_mean_i = np.sum([i * p for (i, _), p in np.ndenumerate(matrix)])
         glcm_mean_j = np.sum([j * p for (_, j), p in np.ndenumerate(matrix)])
         glcm_mean = (glcm_mean_i + glcm_mean_j) / 2
+
+        result['glcm_mean'] = glcm_mean
 
         variance = np.sum([p * (i - glcm_mean_i) ** 2
                            for (i, j), p in np.ndenumerate(matrix)])
@@ -721,3 +725,150 @@ class GlcmFeatures3D(DescriptorBase):
 
     def GetType(self) -> DescriptorType:
         return DescriptorType.DICT_SCALAR
+
+
+class GaborFilterBank(DescriptorBase):
+    """
+        Creates a bank of gabor filters with given parameters.
+
+        Parameters:
+        - sigma: float
+        - lamb: float
+        - psi: float
+        - gamma: float
+        - size: float
+
+        Returns a list with gabor filters within given parameters.
+    """
+
+    def __init__(self, sigma: float, lamb: float, psi: float,
+                 gamma: float, size: float):
+        self.sigma = sigma
+        self.lamb = lamb
+        self.psi = psi
+        self.gamma = gamma
+        self.size = size
+
+    def rotate(self, theta):
+        R_x = np.array([[1, 0, 0],
+                        [0, cos(theta[0]), -sin(theta[0])],
+                        [0, sin(theta[0]), cos(theta[0])]
+                        ])
+
+        R_y = np.array([[cos(theta[1]), 0, sin(theta[1])],
+                        [0, 1, 0],
+                        [-sin(theta[1]), 0, cos(theta[1])]
+                        ])
+
+        R_z = np.array([[cos(theta[2]), -sin(theta[2]), 0],
+                        [sin(theta[2]), cos(theta[2]), 0],
+                        [0, 0, 1]
+                        ])
+
+        return np.dot(R_z, np.dot(R_y, R_x))
+
+    def getGaborFunction(self, thetas):
+        sigma_x = self.sigma
+        sigma_y = self.sigma / self.gamma
+        sigma_z = self.sigma / self.gamma
+
+        (z, y, x) = np.meshgrid(np.arange(-self.size, self.size + 1),
+                                np.arange(-self.size, self.size + 1),
+                                np.arange(-self.size, self.size + 1))
+
+        rotation = self.rotate(thetas)
+        z_prime = z * rotation[0, 0] + y * rotation[0, 1] + x * rotation[0, 2]
+        y_prime = z * rotation[1, 0] + y * rotation[1, 1] + x * rotation[1, 2]
+        x_prime = z * rotation[2, 0] + y * rotation[2, 1] + x * rotation[2, 2]
+
+        gabor = np.exp(-.5 * (x_prime ** 2 / sigma_x ** 2 + y_prime ** 2 /
+                       sigma_y ** 2 + z_prime ** 2 / sigma_z)) * np.cos(
+                               2 * np.pi * x_prime / self.lamb + self.psi)
+
+        return gabor
+
+    def getGaussian(self):
+        (z, y, x) = np.meshgrid(np.arange(-self.size, self.size + 1),
+                                np.arange(-self.size, self.size + 1),
+                                np.arange(-self.size, self.size + 1))
+
+        g = np.exp(-(x ** 2 / float(self.size) +
+                     y ** 2 / float(self.size) +
+                     z ** 2 / float(self.size)))
+
+        return g / g.sum()
+
+    def Eval(self) -> np.array:
+        filters = []
+
+        for theta_x in np.arange(0, np.pi, np.pi / 4):
+            for theta_y in np.arange(0, np.pi, np.pi / 4):
+                for theta_z in np.arange(0, np.pi, np.pi / 4):
+                    thetas = [theta_x, theta_y, theta_z]
+
+                    kernel = self.getGaborFunction(thetas)
+                    kernel /= 1.5 * kernel.sum()
+
+                    filters.append(np.transpose(kernel))
+
+        filters.append(self.getGaussian())
+
+        return filters
+
+    def GetName(self) -> str:
+        return "Gabor filter bank"
+
+    def GetType(self) -> DescriptorType:
+        return DescriptorType.VECTOR
+
+
+class GaborFilters(DescriptorBase):
+    """
+        Applies a Gabor filter bank, created with the specified parameters,
+        to an image and returns the maximum response per pixel.
+
+        Parameters:
+        - sigma: float, default=1.5
+            Standard deviation of the Gaussian envelope.
+        - lamb: float, default=10.0
+            Wavelength of the sinusoidal factor.
+        - psi: float, default=0.3
+            Phase offset of the sinusoidal factor.
+        - gamma: float, default=0.3
+            Spatial aspect ratio.
+        - size: float, default=11
+            Size of the filter.
+
+        Returns:
+        - Tuple:
+            - numpy.array: indexes of the filters with the maximum response
+                           per pixel
+            - list: the bank of Gabor filters
+    """
+
+    def Eval(self, image: np.array, mask: np.array, sigma: float = 1.5,
+             lamb: float = 10.0, psi: float = 0.3, gamma: float = 0.3,
+             size: float = 11):
+
+        img = np.copy(image)
+        img[mask == 0] = 0
+
+        gabor_filter_bank = GaborFilterBank(sigma, lamb, psi, gamma, size)
+        filters = gabor_filter_bank.Eval()
+
+        max_response = np.full_like(img, -np.inf)
+        best_filter_idx = np.zeros_like(img, dtype=int)
+
+        for idx, filter in enumerate(filters):
+            response = convolve(img, filter, mode='constant', cval=0.0)
+            mask = response > max_response
+            max_response[mask] = response[mask]
+            best_filter_idx[mask] = idx
+
+        return (best_filter_idx, gabor_filter_bank)
+
+    def GetName(self) -> str:
+        return "Gabor filters"
+
+    def GetType(self) -> DescriptorType:
+        return DescriptorType.SPECTAL_HISTOGRAM

@@ -430,7 +430,7 @@ class RawMoments3D(DescriptorBase):
         return DescriptorType.DICT_SCALAR
 
 
-class CentralMoments3D(DescriptorBase):
+class CentralMoments(DescriptorBase):
     """
         Calculates the centroids and central moments from the 2nd up to
         the given order or defaults to the 4th order of the image within
@@ -446,9 +446,10 @@ class CentralMoments3D(DescriptorBase):
         Returns a dictionary with the following descriptors:
         - moments for the corresponding key tuple (p, q, r) representing
           the orders along the x, y, and z axes.
-        - centroid_x
-        - centroid_y
-        - centroid_z
+        - centroid_x, centroid_y, centroid_z: Centroids of the image volume
+          along the x, y, and z axes.
+        - skewness_x, skewness_y, skewness_z: Skewness along the axes.
+        - kurtosis_x, kurtosis_y, kurtosis_z: Kurtosis along the axes.
     """
 
     def __init__(self, order: int = 4, normalize: bool = False):
@@ -486,10 +487,26 @@ class CentralMoments3D(DescriptorBase):
         central_moments['centroid_y'] = centroid_y
         central_moments['centroid_z'] = centroid_z
 
+        sigma_x = np.sqrt(central_moments['200'])
+        sigma_y = np.sqrt(central_moments['020'])
+        sigma_z = np.sqrt(central_moments['002'])
+
+        central_moments['m200'] = central_moments['200']
+        central_moments['m020'] = central_moments['020']
+        central_moments['m002'] = central_moments['002']
+
+        central_moments['skewness_x'] = central_moments['300'] / sigma_x**3
+        central_moments['skewness_y'] = central_moments['030'] / sigma_y**3
+        central_moments['skewness_z'] = central_moments['003'] / sigma_z**3
+
+        central_moments['kurtosis_x'] = (central_moments['400'] / sigma_x**4)
+        central_moments['kurtosis_y'] = (central_moments['040'] / sigma_y**4)
+        central_moments['kurtosis_z'] = (central_moments['004'] / sigma_z**4)
+
         return central_moments
 
     def GetName(self) -> str:
-        return "CentralMoments"
+        return "Central Moments"
 
     def GetType(self) -> DescriptorType:
         return DescriptorType.DICT_SCALAR

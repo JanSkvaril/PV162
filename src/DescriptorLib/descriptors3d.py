@@ -527,7 +527,7 @@ class HuMoments3D(DescriptorBase):
         copy[mask == 0] = 0
         result = dict()
 
-        central_normalized_moments = CentralMoments3D(3, True)
+        central_normalized_moments = CentralMoments3D(4, True)
         cnm = central_normalized_moments.Eval(image, mask)
 
         result['hu1'] = cnm['200'] + cnm['020'] + cnm['002']
@@ -872,4 +872,4 @@ class GaborFilters(DescriptorBase):
         return "Gabor filters"
 
     def GetType(self) -> DescriptorType:
-        return DescriptorType.SPECTAL_HISTOGRAM
+        return DescriptorType.MATRIX
